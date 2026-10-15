@@ -1,6 +1,6 @@
 {
   "name": "git-graph",
-  "version": "0.4.0",
-  "description": "Pane with the repo, branch, main and latest updates that appears for 10 seconds after Claude commits, in whichever repo the commit ran (git -C, cd).",
+  "version": "0.5.0",
+  "description": "Pane with the repo (named after its origin), branch, main and latest updates that appears for 10 seconds after Claude commits, in whichever repo the commit ran.",
   "types": "./types/index.d.ts"
 }

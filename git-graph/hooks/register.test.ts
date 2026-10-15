@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { commitDir } from './register'
+import { commitDir, repoName } from './register'
 
 test('a plain commit uses the session folder', () => {
   expect(commitDir('git commit -m "x"')).toBe(undefined)
@@ -31,4 +31,14 @@ test('git -C after cd is relative to it', () => {
 
 test('-C that belongs to commit itself is not a folder', () => {
   expect(commitDir('git commit -C HEAD')).toBe(undefined)
+})
+
+test('the repo name comes from origin, not from the folder', () => {
+  expect(repoName('https://github.com/HoyngM/DE.git\n', '/Users/max/Developer/jads-y2-de\n')).toBe('DE')
+  expect(repoName('git@github.com:HoyngM/Jaar-1.git', '/x/y')).toBe('Jaar-1')
+  expect(repoName('https://github.com/HoyngM/Hobby/', '/x/y')).toBe('Hobby')
+})
+
+test('without an origin the folder name stands', () => {
+  expect(repoName('', '/Users/max/Developer/Hobby\n')).toBe('Hobby')
 })

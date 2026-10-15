@@ -51,6 +51,15 @@ export const commitDir = (command: string): string | undefined => {
   return dir
 }
 
+// The repo's own name, not its folder's: the last part of the origin URL
+// (`https://host/owner/name.git`, `git@host:owner/name.git`), so a clone kept in
+// a folder with another name still shows the name the repo has on GitHub.
+// Without an origin, the folder's name stands.
+export const repoName = (remote: string, topLevel: string): string => {
+  const fromRemote = remote.trim().replace(/\/+$/, '').replace(/\.git$/, '').split(/[/:]/).pop() ?? ''
+  return fromRemote !== '' ? fromRemote : (topLevel.trim().split('/').pop() ?? '')
+}
+
 const parseRecent = (stdout: string): Recent[] =>
   stdout
     .split('\n')
@@ -69,7 +78,8 @@ async function refresh($: EngineInterface, dir?: string) {
   }
 
   const top = await git('rev-parse', '--show-toplevel')
-  await update($, repo, () => top.stdout.trim().split('/').pop() ?? '')
+  const origin = await git('remote', 'get-url', 'origin')
+  await update($, repo, () => repoName(origin.exitCode === 0 ? origin.stdout : '', top.stdout))
 
   const main = await git('log', '-n1', '--format=%s', 'main')
   await update($, mainTitle, () => (main.exitCode === 0 ? main.stdout.trim() : ''))
