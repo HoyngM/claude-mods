@@ -1,0 +1,5 @@
+{
+  "name": "hoyngm-mods",
+  "owner": { "name": "HoyngM" },
+  "plugins": [{ "name": "git-graph", "source": "./git-graph" }]
+}

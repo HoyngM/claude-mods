@@ -1,0 +1,6 @@
+{
+  "name": "git-graph",
+  "version": "0.1.0",
+  "description": "Shows a commit graph with titles above the prompt after every git command.",
+  "types": "./types/index.d.ts"
+}
