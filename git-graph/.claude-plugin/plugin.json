@@ -1,6 +1,6 @@
 {
   "name": "git-graph",
-  "version": "0.2.0",
-  "description": "Shows a commit graph with titles above the prompt after every git command.",
+  "version": "0.3.0",
+  "description": "Pane with the repo, branch, main and latest updates that appears for 10 seconds after Claude commits.",
   "types": "./types/index.d.ts"
 }

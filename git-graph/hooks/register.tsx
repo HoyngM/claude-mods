@@ -13,8 +13,9 @@ const branch = atom({ plugin: 'git-graph', key: 'branch' } as const, '')
 
 const phase = atom({ plugin: 'git-graph', key: 'phase' } as const, 'ok')
 
-const GIT = /^\s*(rtk\s+)?git\s+/
+const COMMIT = /\bgit\s+(?:-\S+\s+)*commit\b/
 const MIN_RUNNING_MS = 800
+const VISIBLE_MS = 10_000
 
 // Yellow while a git command runs, green once it is done, red if it failed.
 const BORDER = { running: 'yellow', ok: 'green', failed: 'red' } as const
@@ -59,20 +60,19 @@ async function refresh($: EngineInterface) {
 }
 
 export const register: Register = on => {
-  on('session.start', async ($, e, next) => {
-    await refresh($)
-    void $.ui.open({ id: PANE, title: 'Git graph' })
-
-    return next(e)
-  })
+  // The pane only exists for a moment after Claude makes a commit.
+  let closeTimer: { cancel: () => void } | undefined
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (!GIT.test(e.command)) {
+    if (!COMMIT.test(e.command)) {
       return next(e)
     }
 
+    closeTimer?.cancel()
     const startedAt = await $.clock.now()
+    await refresh($)
     await update($, phase, () => 'running')
+    void $.ui.open({ id: PANE, title: 'Git graph' })
 
     const ran = await next(e)
     await refresh($)
@@ -85,6 +85,10 @@ export const register: Register = on => {
 
     const hasFailed = ran.deny === undefined && ran.isError === true
     await update($, phase, () => (hasFailed ? 'failed' : 'ok'))
+
+    closeTimer = $.clock.after(VISIBLE_MS, () => {
+      void $.ui.close({ id: PANE })
+    })
 
     return ran
   }).catch(($, e, next) => next(e))
