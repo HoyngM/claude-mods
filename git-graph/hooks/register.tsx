@@ -13,7 +13,14 @@ const branch = atom({ plugin: 'git-graph', key: 'branch' } as const, '')
 
 const phase = atom({ plugin: 'git-graph', key: 'phase' } as const, 'ok')
 
-const COMMIT = /\bgit\s+(?:-\S+\s+)*commit\b/
+// A path argument: double quoted, single quoted or bare.
+const ARG = String.raw`"[^"]*"|'[^']*'|[^\s;&|]+`
+
+// `git commit`, also with global options before it: `git -C <dir> commit`,
+// `git -c user.name=x commit`, `git --no-pager commit`.
+const COMMIT = new RegExp(String.raw`\bgit\s+(?:(?:-[Cc]|--git-dir|--work-tree)\s+(?:${ARG})\s+|-\S+\s+)*commit\b`)
+const GIT_C = new RegExp(String.raw`(?:^|\s)-C\s+(${ARG})`)
+const CD = new RegExp(String.raw`\bcd\s+(${ARG})\s*(?:&&|;)`, 'g')
 const MIN_RUNNING_MS = 800
 const VISIBLE_MS = 10_000
 
@@ -21,6 +28,28 @@ const VISIBLE_MS = 10_000
 const BORDER = { running: 'yellow', ok: 'green', failed: 'red' } as const
 const LABEL_WIDTH = 16
 const NARROW_COLUMNS = 70
+
+const unquote = (arg: string) => arg.replace(/^(["'])(.*)\1$/, '$2')
+
+// The directory a commit command runs in when the command says so itself:
+// the last `cd <dir> &&` before it, then its own `git -C <dir>`. Otherwise
+// undefined, and the session's working directory stands.
+export const commitDir = (command: string): string | undefined => {
+  const hit = COMMIT.exec(command)
+  if (hit === null) {
+    return undefined
+  }
+  let dir: string | undefined
+  for (const cd of command.slice(0, hit.index).matchAll(CD)) {
+    dir = unquote(cd[1])
+  }
+  const dashC = GIT_C.exec(hit[0])
+  if (dashC !== null) {
+    const sub = unquote(dashC[1])
+    dir = sub.startsWith('/') || sub.startsWith('~') || dir === undefined ? sub : `${dir}/${sub}`
+  }
+  return dir
+}
 
 const parseRecent = (stdout: string): Recent[] =>
   stdout
@@ -31,32 +60,43 @@ const parseRecent = (stdout: string): Recent[] =>
       return { title, when }
     })
 
-async function refresh($: EngineInterface) {
-  const latest = await $.process.run(['git', 'log', '-n4', '--format=%s%x1f%cr'])
+async function refresh($: EngineInterface, dir?: string) {
+  const git = (...args: string[]) => $.process.run(['git', ...args], dir === undefined ? undefined : { cwd: dir })
+
+  const latest = await git('log', '-n4', '--format=%s%x1f%cr')
   if (latest.exitCode === 0) {
     await update($, recent, () => parseRecent(latest.stdout))
   }
 
-  const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'])
+  const top = await git('rev-parse', '--show-toplevel')
   await update($, repo, () => top.stdout.trim().split('/').pop() ?? '')
 
-  const main = await $.process.run(['git', 'log', '-n1', '--format=%s', 'main'])
+  const main = await git('log', '-n1', '--format=%s', 'main')
   await update($, mainTitle, () => (main.exitCode === 0 ? main.stdout.trim() : ''))
 
-  const name = await $.process.run(['git', 'branch', '--show-current'])
+  const name = await git('branch', '--show-current')
   await update($, branch, () => name.stdout.trim())
 
   // "<behind>\t<ahead>"; a branch without an upstream counts as 0 and 0.
-  const count = await $.process.run([
-    'git',
-    'rev-list',
-    '--left-right',
-    '--count',
-    '@{upstream}...HEAD',
-  ])
+  const count = await git('rev-list', '--left-right', '--count', '@{upstream}...HEAD')
   const [b, a] = count.exitCode === 0 ? count.stdout.trim().split(/\s+/).map(Number) : [0, 0]
   await update($, behind, () => b)
   await update($, ahead, () => a)
+}
+
+// A `~` or a missing folder cannot be handed to the child as it stands: expand
+// the home folder, and fall back to the session's folder when it is no repo.
+async function resolveDir($: EngineInterface, dir: string | undefined) {
+  if (dir === undefined) {
+    return undefined
+  }
+  let full = dir
+  if (dir === '~' || dir.startsWith('~/')) {
+    const home = await $.process.run(['sh', '-c', 'printf %s "$HOME"'])
+    full = home.stdout + dir.slice(1)
+  }
+  const probe = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd: full }).catch(() => undefined)
+  return probe !== undefined && probe.exitCode === 0 ? full : undefined
 }
 
 export const register: Register = on => {
@@ -70,12 +110,14 @@ export const register: Register = on => {
 
     closeTimer?.cancel()
     const startedAt = await $.clock.now()
-    await refresh($)
+    const dir = await resolveDir($, commitDir(e.command))
+    await refresh($, dir)
     await update($, phase, () => 'running')
     void $.ui.open({ id: PANE, title: 'Git graph' })
 
     const ran = await next(e)
-    await refresh($)
+    // A commit that created its folder (`git init`) has a repo only now.
+    await refresh($, (await resolveDir($, commitDir(e.command))) ?? dir)
 
     // Hold the yellow long enough to be seen before it turns green.
     const elapsed = (await $.clock.now()) - startedAt
