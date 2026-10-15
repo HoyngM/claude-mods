@@ -11,7 +11,13 @@ const ahead = atom({ plugin: 'git-graph', key: 'ahead' } as const, 0)
 const behind = atom({ plugin: 'git-graph', key: 'behind' } as const, 0)
 const branch = atom({ plugin: 'git-graph', key: 'branch' } as const, '')
 
+const phase = atom({ plugin: 'git-graph', key: 'phase' } as const, 'ok')
+
 const GIT = /^\s*(rtk\s+)?git\s+/
+const MIN_RUNNING_MS = 800
+
+// Yellow while a git command runs, green once it is done, red if it failed.
+const BORDER = { running: 'yellow', ok: 'green', failed: 'red' } as const
 const LABEL_WIDTH = 16
 const NARROW_COLUMNS = 70
 
@@ -61,11 +67,24 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    const ran = await next(e)
-
-    if (GIT.test(e.command)) {
-      await refresh($)
+    if (!GIT.test(e.command)) {
+      return next(e)
     }
+
+    const startedAt = await $.clock.now()
+    await update($, phase, () => 'running')
+
+    const ran = await next(e)
+    await refresh($)
+
+    // Hold the yellow long enough to be seen before it turns green.
+    const elapsed = (await $.clock.now()) - startedAt
+    if (elapsed < MIN_RUNNING_MS) {
+      await $.clock.sleep(MIN_RUNNING_MS - elapsed)
+    }
+
+    const hasFailed = ran.deny === undefined && ran.isError === true
+    await update($, phase, () => (hasFailed ? 'failed' : 'ok'))
 
     return ran
   }).catch(($, e, next) => next(e))
@@ -78,12 +97,13 @@ export const register: Register = on => {
     const name = await read($, branch)
     const title = await read($, repo)
     const onMain = await read($, mainTitle)
+    const borderColor = BORDER[(await read($, phase)) as keyof typeof BORDER]
 
     // A docked side pane is narrow: stack each label above its value.
     if ((e.viewport?.columns ?? 80) < NARROW_COLUMNS) {
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-          <Text bold color="cyan">{title.toUpperCase()}</Text>
+        <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={1}>
+          <Text bold color={borderColor}>{title.toUpperCase()}</Text>
           <Text bold>You're on:</Text>
           <Box paddingLeft={2}>
             <Text>
@@ -113,8 +133,8 @@ export const register: Register = on => {
     }
 
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-        <Text bold color="cyan">{title.toUpperCase()}</Text>
+      <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={1}>
+        <Text bold color={borderColor}>{title.toUpperCase()}</Text>
         <Box alignItems="flex-start" justifyContent="flex-start">
           <Box width={LABEL_WIDTH}>
             <Text bold>You're on:</Text>

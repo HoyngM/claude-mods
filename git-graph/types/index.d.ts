@@ -9,6 +9,7 @@ declare module 'claude-code' {
       ahead: number
       behind: number
       branch: string
+      phase: string
     }
   }
 }
