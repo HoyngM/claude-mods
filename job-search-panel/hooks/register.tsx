@@ -24,9 +24,25 @@ export const register: Register = on => {
       name: 'jobs',
       description: 'Open the job search pane with Scrape and Rank buttons',
     })
+    await $.command.register({
+      name: 'refresh',
+      description: 'Refresh the Job search dashboard artifact and open it',
+    })
     if (await jobs($)) void $.ui.open({ id: PANE, title: 'Job search' })
 
     return next(e)
+  })
+
+  on('command.run', { command: 'refresh' }, async $ => {
+    if (!(await jobs($))) {
+      return { text: 'No job_scraper/seen_jobs.json here. Open this in the ai-job-search folder.' }
+    }
+    void $.prompt.submit({
+      text:
+        'Refresh the Job search dashboard artifact now. Follow the steps under "Dashboard sync after /scrape and /rank" in CLAUDE.md, in order, without running /scrape or /rank first. Finish with one line saying how many rows the dashboard holds.',
+    })
+
+    return { text: 'Refreshing the dashboard.' }
   })
 
   on('command.run', { command: 'jobs' }, async $ => {
@@ -59,7 +75,7 @@ export const register: Register = on => {
         <Box>
           <Button key="scrape" variant="primary" hotkey="s" onPress={() => void send(['scrape', 'job-scraper'])}>Scrape</Button>
           <Button key="rank" hotkey="r" onPress={() => void send(['rank'])}>Rank</Button>
-          <Button key="refresh" hotkey="f" onPress={() => void update($, tick, n => n + 1)}>Refresh</Button>
+          <Button key="refresh" hotkey="f" onPress={() => void update($, tick, n => n + 1)}>Reload list</Button>
         </Box>
         <Text dimColor>High and medium matches, closest deadline first</Text>
         {list.slice(0, room).map(j => (
