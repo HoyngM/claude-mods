@@ -1,0 +1,6 @@
+{
+  "name": "job-search-panel",
+  "version": "0.1.0",
+  "description": "Pane with Scrape and Rank buttons and the top matches from job_scraper/seen_jobs.json",
+  "types": "./types/index.d.ts"
+}

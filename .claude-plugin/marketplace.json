@@ -1,5 +1,16 @@
 {
   "name": "hoyngm-mods",
-  "owner": { "name": "HoyngM" },
-  "plugins": [{ "name": "git-graph", "source": "./git-graph" }]
+  "owner": {
+    "name": "HoyngM"
+  },
+  "plugins": [
+    {
+      "name": "git-graph",
+      "source": "./git-graph"
+    },
+    {
+      "name": "job-search-panel",
+      "source": "./job-search-panel"
+    }
+  ]
 }
