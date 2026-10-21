@@ -1,0 +1,6 @@
+{
+  "name": "thesis-progress-tracker",
+  "version": "0.1.0",
+  "description": "In thesis sessions, Claude files short dated notes (scope, future work, limitations, method choices, results) under the matching section of a copy of the JADS thesis structure, commits and pushes it to git, and shows a pane with what was added for 10 seconds.",
+  "types": "./types/index.d.ts"
+}

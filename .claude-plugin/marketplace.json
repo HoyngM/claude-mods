@@ -11,6 +11,10 @@
     {
       "name": "job-search-panel",
       "source": "./job-search-panel"
+    },
+    {
+      "name": "thesis-progress-tracker",
+      "source": "./thesis-progress-tracker"
     }
   ]
 }
