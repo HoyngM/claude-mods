@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { commitDir, repoName } from './register'
+import { commitDir, mainCandidates, repoName } from './register'
 
 test('a plain commit uses the session folder', () => {
   expect(commitDir('git commit -m "x"')).toBe(undefined)
@@ -37,6 +37,15 @@ test('the repo name comes from origin, not from the folder', () => {
   expect(repoName('https://github.com/HoyngM/DE.git\n', '/Users/max/Developer/jads-y2-de\n')).toBe('DE')
   expect(repoName('git@github.com:HoyngM/Jaar-1.git', '/x/y')).toBe('Jaar-1')
   expect(repoName('https://github.com/HoyngM/Hobby/', '/x/y')).toBe('Hobby')
+})
+
+test('main is looked up under main and master, local and on origin', () => {
+  expect(mainCandidates('')).toEqual(['main', 'origin/main', 'master', 'origin/master'])
+})
+
+test('the branch origin points at is tried first', () => {
+  expect(mainCandidates('origin/develop\n')).toEqual(['develop', 'origin/develop', 'main', 'origin/main', 'master', 'origin/master'])
+  expect(mainCandidates('origin/master')).toEqual(['master', 'origin/master', 'main', 'origin/main'])
 })
 
 test('without an origin the folder name stands', () => {

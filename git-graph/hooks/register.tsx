@@ -60,6 +60,15 @@ export const repoName = (remote: string, topLevel: string): string => {
   return fromRemote !== '' ? fromRemote : (topLevel.trim().split('/').pop() ?? '')
 }
 
+// The refs to try for the repo's main branch, best first: the branch origin's HEAD
+// points at (`origin/master`), then `main`, then `master`; each as a local branch
+// and as its origin copy, so a clone without a local main still finds it.
+export const mainCandidates = (originHead: string): string[] => {
+  const head = originHead.trim().replace(/^origin\//, '')
+  const names = [...new Set([head, 'main', 'master'].filter(name => name !== ''))]
+  return names.flatMap(name => [name, `origin/${name}`])
+}
+
 const parseRecent = (stdout: string): Recent[] =>
   stdout
     .split('\n')
@@ -81,8 +90,16 @@ async function refresh($: EngineInterface, dir?: string) {
   const origin = await git('remote', 'get-url', 'origin')
   await update($, repo, () => repoName(origin.exitCode === 0 ? origin.stdout : '', top.stdout))
 
-  const main = await git('log', '-n1', '--format=%s', 'main')
-  await update($, mainTitle, () => (main.exitCode === 0 ? main.stdout.trim() : ''))
+  const originHead = await git('symbolic-ref', '--short', 'refs/remotes/origin/HEAD')
+  let main = ''
+  for (const ref of mainCandidates(originHead.exitCode === 0 ? originHead.stdout : '')) {
+    const hit = await git('log', '-n1', '--format=%s', ref, '--')
+    if (hit.exitCode === 0) {
+      main = hit.stdout.trim()
+      break
+    }
+  }
+  await update($, mainTitle, () => main)
 
   const name = await git('branch', '--show-current')
   await update($, branch, () => name.stdout.trim())
