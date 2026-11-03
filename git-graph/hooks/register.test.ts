@@ -29,6 +29,21 @@ test('git -C after cd is relative to it', () => {
   expect(commitDir('cd /a && git -C /abs commit -m x')).toBe('/abs')
 })
 
+test('a variable in cd is filled in from its assignment', () => {
+  expect(commitDir('R=/a/b; cd $R && git commit -m x')).toBe('/a/b')
+  expect(commitDir('cd ~/x && R=sub/repo; cd "${R}" && git add -A && git commit -m x')).toBe('~/x/sub/repo')
+})
+
+test('a relative cd stacks on the one before it', () => {
+  expect(commitDir('cd /a && cd b && git commit -m x')).toBe('/a/b')
+  expect(commitDir('cd /a && cd /c && git commit -m x')).toBe('/c')
+  expect(commitDir('cd C:/a && cd b && git commit -m x')).toBe('C:/a/b')
+})
+
+test('an unknown variable is left as it is', () => {
+  expect(commitDir('cd $NOPE && git commit -m x')).toBe('$NOPE')
+})
+
 test('-C that belongs to commit itself is not a folder', () => {
   expect(commitDir('git commit -C HEAD')).toBe(undefined)
 })

@@ -31,22 +31,37 @@ const NARROW_COLUMNS = 70
 
 const unquote = (arg: string) => arg.replace(/^(["'])(.*)\1$/, '$2')
 
+// A plain assignment before the commit (`R=plugins/x;`), so `cd $R` can be followed.
+const ASSIGN = new RegExp(String.raw`(?:^|[\s;&|])([A-Za-z_]\w*)=(${ARG})`, 'g')
+const VAR = /\$(\w+)|\$\{(\w+)\}/g
+
+// A folder that does not start from the root, the home folder or a drive letter
+// is relative to the folder before it.
+const joinDir = (dir: string | undefined, sub: string) =>
+  dir === undefined || /^(?:[/~]|[A-Za-z]:)/.test(sub) ? sub : `${dir}/${sub}`
+
 // The directory a commit command runs in when the command says so itself:
-// the last `cd <dir> &&` before it, then its own `git -C <dir>`. Otherwise
-// undefined, and the session's working directory stands.
+// the `cd <dir> &&` steps before it (relative ones stack, `$VAR` is filled in
+// from plain assignments), then its own `git -C <dir>`. Otherwise undefined,
+// and the session's working directory stands.
 export const commitDir = (command: string): string | undefined => {
   const hit = COMMIT.exec(command)
   if (hit === null) {
     return undefined
   }
+  const before = command.slice(0, hit.index)
+  const vars = new Map<string, string>()
+  const expand = (arg: string) => unquote(arg).replace(VAR, (all, a?: string, b?: string) => vars.get(a ?? b ?? '') ?? all)
+  for (const set of before.matchAll(ASSIGN)) {
+    vars.set(set[1], expand(set[2]))
+  }
   let dir: string | undefined
-  for (const cd of command.slice(0, hit.index).matchAll(CD)) {
-    dir = unquote(cd[1])
+  for (const cd of before.matchAll(CD)) {
+    dir = joinDir(dir, expand(cd[1]))
   }
   const dashC = GIT_C.exec(hit[0])
   if (dashC !== null) {
-    const sub = unquote(dashC[1])
-    dir = sub.startsWith('/') || sub.startsWith('~') || dir === undefined ? sub : `${dir}/${sub}`
+    dir = joinDir(dir, expand(dashC[1]))
   }
   return dir
 }
@@ -171,6 +186,17 @@ export const register: Register = on => {
     const title = await read($, repo)
     const onMain = await read($, mainTitle)
     const borderColor = BORDER[(await read($, phase)) as keyof typeof BORDER]
+
+    // No repo name means git found no repo for this command: say so, instead
+    // of showing a detached HEAD and an unknown main.
+    if (title === '') {
+      return (
+        <Box flexDirection="column" borderStyle="round" borderColor={borderColor} paddingX={1}>
+          <Text bold color={borderColor}>GIT GRAPH</Text>
+          <Text dimColor>No git repo found for this command.</Text>
+        </Box>
+      )
+    }
 
     // A docked side pane is narrow: stack each label above its value.
     if ((e.viewport?.columns ?? 80) < NARROW_COLUMNS) {
